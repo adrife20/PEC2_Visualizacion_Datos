@@ -1,0 +1,459 @@
+---
+title: "Procesos de Paz"
+author: "Adrian Felipe Pinzon Hurtado"
+date: "20/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+setwd("~/Master UOC - Ciencias de Datos/Visualizacion_Datos/PEC_2/pinzon_proceso_2")
+#install.packages("flexdashboard")
+library(PerformanceAnalytics)
+library(stringr)
+library(readxl)
+library(dplyr)
+library(quanteda)
+library(tm)
+library(ggplot2)
+library(topicmodels)
+library(tidytext)
+library(ggplot2)
+library(stringdist)
+library(sqldf)
+library(lattice)
+library(survival)
+library(Formula)
+library(Hmisc)
+library(lubridate)
+library(MASS)
+library(tidyverse)
+library(data.table)
+library(VIM)
+#install.packages("VIMGUI")
+library(knitr)
+library(gridExtra)
+library(grid)
+library(kableExtra)
+library(magrittr)
+library(xtable)
+library(tidyr)
+library(hms)
+#install.packages("ggpubr")
+library(ggpubr)
+library(reshape2)
+#install.packages("PASWR")
+library(PASWR)
+#library(treemap)
+#library(d3treeR)
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+# Explicación Dataset
+<p> Se tomarán los datos de los distintos procesos de paz a nivel mundial y luego discriminados para las américas, evaluando las siguientes variables:  </p> 
+
+<p> <b>PP:</b> Código del nombre del proceso. </p>
+<p> <b>Reg:</b> Región (continente) donde se desarrolla el conficto. </p>
+<p> <b>Con:</b> País donde se desarrolla el conflico. </p>
+<p> <b>Contp:</b> Tipo de conflicto (Gobierno, territorio, ambos, inter-grupo) </p>
+<p> <b>Ver:</b> Indica cuál salida PA-X acordada fue publicada.  </p>
+<p> <b>LaRefRet:</b> Incluye restititución de Tierras o territorios. Es binaria con 1 si la incluye, y 0 si no incluye. Tiene que ver con mecanismo para restituir propiedades que fueron confiscadas, perdidas, destruidas o desplazadas a causa del conflicto.</p>
+<p> <b>Lgt:</b> Tamaño del acuerdo en páginas. Tomado por un pdf e incluye títulos páginas en blanco, fotos y similares. </p>
+<p> <b>N_characters:</b> Tamado del texto acordado por número de caracteres.</p>
+<p> <b>BanPers:</b> Variable binaria que toma el valor de 1 si el acuerdo de paz esta lidiando con cuestiones de banca personal, acceso a cuentas y fondos, facilidad bancaria y facilidades comerciales bancarias.</p>
+<p> <b>TjPower:</b> Variable binaria que toma el valor de 1 si el acuerdo de paz incluye anmistia, perdón y actores legislativos para crímenes no definidos (no necesariamente violencia pasada)Si las provisiones aparecen en el acuerdo, el valor es cero. </p>
+<p> <b>TjVic:</b> Incluye cualquier provisión específica para asistencia de las víctimas del conflicto en este y otros términos.Toma los siguientes valores:</p>
+<p>1 = por compromisos débiles y retóricos;</p>
+<p>2 = compromisos sustantivos para el trato de las víctimas.</p>
+<p>3 = provee fuertes compromisos para atender las vícitmas que incluye detalles del modos operandi. </p>
+<p> <b>CowWar:</b> Correlaciones de guerra. ID Number.Muchos acuerdos de paz vienen de procesos en conflictos que no reunen los altos criterios de letalidad de las correlaciones de guerra por lo que los números de guerra no se proporcionan para muchos de los acuerdos. Más info de este item en https://correlatesofwar.org/ </p>
+
+
+## 1.1. Lectura del Fichero
+Se anexan salida en tabla del archivo procesado:
+
+```{r tabla_h, echo=FALSE}
+df <- read.table("pax_all_agreements_data.csv",header=T,sep=",",quote = "\"",
+               dec = ",",fill = TRUE, comment.char = "",stringsAsFactors = TRUE)               
+    #             dec = ",",fill = TRUE, as.is = c(TRUE, TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, TRUE, FALSE, FALSE), comment.char = "",stringsAsFactors = TRUE)
+
+cols.SQLDejar <- c("AgtId","PP","Con","Contp","Reg","LaRed","Ver","Lgt","N_characters","BanPers","TjPower","TjVic","LaRefRet","CowWar")
+
+names (df)[1] = "Con"
+df <- df[,names(df) %in% cols.SQLDejar, drop = F]
+
+tabla_h  <- sqldf('SELECT * FROM df LIMIT 10')
+
+kable(tabla_h,caption = "MUESTRA DE LA DATA") %>%
+  kable_styling(latex_options="scale_down", position = "left") %>%
+  row_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+  row_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+  row_spec(3, bold = T, color = "gray", background = "#CAF2FF") %>%
+  row_spec(4, bold = T, color = "gray", background = "#B9EFFF") %>%
+  row_spec(5, bold = T, color = "gray", background = "#A1E9FF") %>%
+  row_spec(6, bold = T, color = "white", background = "#49CFF7") %>%
+  row_spec(7, bold = T, color = "white", background = "#11C3F9") %>%
+  row_spec(8, bold = T, color = "white", background = "#0E9CC7") %>%
+  row_spec(9, bold = T, color = "white", background = "#147F9F") %>%
+  row_spec(10, bold = T, color = "white", background = "#156077") %>%
+  add_footnote(c(""), notation = "symbol")
+```
+```{r, echo=FALSE}
+col_classes <- function(df) {
+    t(as.data.frame(lapply(df, function(x) paste(class(x), collapse = ','))))
+}
+
+# Return example data's column classes
+t <-col_classes(df)
+
+MatrixB <- rbind(c("Tipo Variable"),t)  
+kable(MatrixB,caption = "EXPLORACIÓN DE VARIABLES POR TIPO") %>%
+ 
+  kable_styling(latex_options="scale_down", position = "left") %>%
+  column_spec(2, bold = T, color = "gray", background = "#EAF5F9") %>%
+  column_spec(1,bold = T, color = "white", background = "#147F9F")
+```
+
+## 1.2. Análisis Descriptivo Visual
+### 1.2.1 Variables cualitativas
+Representacion visual de variables representativas.
+
+```{r, echo=FALSE}
+
+ggplot(data.frame(df$Reg), aes(x=df$Reg)) +
+ggtitle("PROCESOS POR REGIONES")+
+  xlab("Región") + ylab("# Procesos")+
+    labs(caption = "Autor: Adrian Felipe Pinzon, Fuente: https://www.peaceagreements.org/search")+
+  geom_bar(fill = "#0E9CC7", color = "#147F9F")+
+theme(
+  axis.text.x = element_text(angle = 90),
+  plot.title = element_text(hjust = 0.5, color = "#147F9F", size = 12, face = "bold"),
+  plot.caption = element_text(color = "gray", face = "italic")
+  
+  )
+
+```
+
+```{r, echo=FALSE}
+
+df_a <-  c()
+df_a <-data.frame(df)
+#A <- c("Americas")
+df_a <-df_a[df$Reg=="Americas",]
+
+#df_a[df_a$Con =="Costa Rica/El Salvador/Guatemala/Honduras/Nicaragua"] <-"Costa Rica"
+#df_a[df_a$Con =="^Costa[a-zA-Z0-9]+"] <-"Costa Rica"
+
+#ggplot(data.frame(top_fifty$Con), aes(x=top_fifty$Con)) +
+ggplot(data.frame(df_a$Con), aes(x=df_a$Con)) +
+ggtitle("TOP PAÍSES AMERICAS CON PROCESOS DE PAZ")+
+  xlab("") + ylab("# Procesos")+
+    labs(caption = "Autor: Adrian Felipe Pinzon, Fuente: https://www.peaceagreements.org/search")+
+    geom_bar(fill = "#0E9CC7", color = "#147F9F")+
+theme(axis.text.x = element_text(hjust = 1,angle = 70,size = 8),
+        plot.title = element_text(hjust = 0.5, color = "#147F9F", size = 12, face = "bold"),
+        plot.caption = element_text(color = "gray",face = "italic")
+      )
+
+#df$Con <- factor(df$Con, levels = df$Con[order(df$PP)])
+
+
+```
+
+
+
+```{r, echo=FALSE}
+var_Sm <- df$Contp
+muestra_Sm <- c(var_Sm)
+factor_Sm <- factor(muestra_Sm)
+#147F9F #DAF5FD
+
+#slices_labels <- paste(slices_labels, "%", sep="")
+
+colors <-c("#11C3F9", "#147F9F","#EAF5F9","#BA2246","#A1E9FF")
+frecuencia_Sm <- round(table(factor_Sm)/length(factor_Sm)*100,2)
+#slices_labels <- round(factor_Sm/sum(factor_Sm) * 100, 1)
+slices_labels <- paste(frecuencia_Sm, "%", sep="")
+
+labels=c("Government","Territory","Government/Territory","Inter-group","Other")
+pie(table(df$Contp),col=colors, labels=slices_labels )  
+#legend("left",legend=levels(as.factor(frecuencia_Sm)), fill=c("#11C3F9", "#DAF5FD"), box.lty=0)
+legend("topright",legend=labels, fill=colors, cex = 0.8,box.lty=0)
+title("Tipo de Conflicto", sub = "Autor: Adrian Felipe Pinzon, Fuente: https://www.peaceagreements.org/search",adj = 0,
+      cex.main = 2,   font.main= 4, col.main= "blue",
+      cex.sub = 0.75, font.sub = 3, col.sub = "gray")
+```
+
+### 1.2.2 Análisis Descriptivo Visual (Variables cuantitativas)
+```{r, echo=FALSE}
+df1 <-  c()
+df1 <-data.frame(df)
+VC <- c("AgtId","CowWar","LaRed","Ver","Lgt","N_characters","BanPers","TjPower","TjVic","LaRefRet")
+
+#df1 <- df[, names(df) %in% VC, drop = F]
+df1 <- df[,which(names(df) %in% VC)]
+#Locaciones: "Loc1GWNO","Loc2GWNO"
+#summary(variables_continuas)
+#variables binarias
+VarBin <- c()
+
+#chart.Correlation(variables_continuas)
+#mtext("My Title Here", side=3, line=3)
+#M <-cor(variables_continuas,use="pairwise.complete.obs")
+#corrplot(M, type="upper", order="hclust",
+#         col=brewer.pal(n=8, name="RdYlBu"))
+
+colnames(df1)
+
+
+```
+
+```{r , echo=FALSE,message=FALSE, warning=FALSE}
+#df1 <- read.table("pax_all_agreements_data.csv",header=T,sep=",",quote = "\"",
+#               dec = ",",fill = TRUE, comment.char = "",stringsAsFactors = TRUE)               
+    #             dec = ",",fill = TRUE, as.is = c(TRUE, TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, TRUE, FALSE, FALSE), comment.char = "",stringsAsFactors = TRUE)
+
+  VC2 <- c("PamAgr","LaRed","Ver","Lgt","N_characters","BanPers","TjPower","TjVic","LaRefRet","GCh","GChRhet","GChAntid","GChSubs","GChOth","GDis","GDisRhet","GDisAntid","GDisSubs","GDisOth","GAge","GAgeRhet","GAgeAntid","GAgeSubs","GAgeOth","GMig","GMigRhet","GMigAntid","GMigSubs","GMigOth","GRa","GRaRhet","GRaAntid","GRaSubs","GRaOth","GRe","GReRhet","GReAntid","GReSubs","GReOth","GInd","GIndRhet","GIndAntid","GIndSubs","GIndOth","GOth","GOthRhet","GOthAntid","GOthSubs","GOthOth","GRef","GRefRhet","GRefSubs","GRefOth","GSoc","GSocRhet","GSocAntid","GSocSubs","GSocOth","GeWom","GeMe","GeMeNu","GeMeOth","GeLgbti","GeLgbtiPos","GeLgbtiNeg","GeFa","StDef","StGen","StCon","StSd","StRef","StSym","StInd","StUni","StBor","StXbor","Pol","PolGen","PolNewInd","PolNewTemp","ConRen","Cons","Ele","ElecComm","PolPar","PolParTrans","PolParOth","Civso","Tral","Pubad","Polps","PpsSt","PpsSub","PpsEx","PpsOro","PpsOthPr","PpsVet","PpsAut","PpsInt","PpsOth","Terps","TpsSub","TpsLoc","TpsAut","TpsOth","Eps","EpsRes","EpsFis","EpsOth","Mps","MpsMe","MpsJt","MpsPro","MpsOth","HrGen","EqGen","HrDem","Prot","ProtCiv","ProtGrp","ProtLgl","ProtOth","HrFra","HrfSp","HrfBor","HrfTinc","HrfOth","HrCp","CprLife","CprTort","CprEq","CprSlav","CprLib","CprDet","CprFmov","CprFspe","CprFass","CprTria","CprPriv","CprVote","CprReli","CprOth","HrSec","SerProp","SerWork","SerHeal","SerEdu","SerStdl","SerShel","SerSs","SerCult","SerOth","HrNi","HrNiMe","HrNiNe","HrNiOth","HrIi","HrIiMon","HrIiBod","HrIiOth","HrMob","HrDet","Med","MedGov","MedSubs","MedLog","MedOth","HrCit","CitGen","CitRights","CitDef","CitOth","JusCr","JusCrSp","JusCrSys","JusCrPow","JusEm","JusJu","JusPri","JusTra","Dev","DevSoc","DevHum","DevInfra","NEC","NatRes","IntFu","Bus","Tax","TaxPo","TaxRef","TaxOth","Ban","CenBan","BanPers","BanInt","BanXb","LaRef","LaRefMan","LaRefRet","LaRefOth","LaNom","LaCH","LaCHTa","LaCHIt","LaCHPro","LaCHOth","LaEn","Wat","SsrGua","Ce","CeProv","CeGen","SsrPol","SsrArm","SsrDdr","DdrDemil","DdrProg","SsrInt","SsrPsf","SsrFf","Cor","SsrCrOcr","SsrDrugs","Terr","TjGen","TjAm","TjAmPro","TjSan","TjPower","TjAmBan","TjCou","TjJaNc","TjJaIc","TjMech","TjPrire","TjVet","TjVic","TjMis","TjRep","TjRSym","TjRMa","TjNR","ImUN","ImOth","ImRef","ImPK","ImE","ImSrc")
+#df1 <- df1[, names(df1) %in% VC2, drop = F]
+#class(df1$CowWar)
+#NAsC <-sum(is.na(df1))
+#NAsC
+#tmp <- cor(tot_varia)
+#tmp[upper.tri(tmp)] <- 0
+#diag(tmp) <- 0
+#NAs <-colSums(is.na(df1))
+#UcdpAgr,PamAgr,CowWar
+
+```
+### 2. Limpieza de datos
+A continuación, se detectan variables nulos o NAs para reemplazarlos con un análisis con el algoritmo  Knn (vecinos más cercanos), para la variable CowWar (correlaciones de guerra)
+
+
+```{r, echo=FALSE,message=FALSE, warning=FALSE}
+
+index_perdidos_Costo <-which(is.na(df1$CowWar))
+dfNA <- c()
+
+dfNA <- data.frame(df1)
+#head(dfNA)
+
+# S3 method for class 'data.frame', tomado de https://rdrr.io/cran/VIM/man/kNN.html
+dfNA <- 
+  kNN(
+  dfNA,
+  #variable = c("CowWar"),
+  variable = colnames(dfNA),
+  metric = NULL,
+  k = 5,
+  dist_var = colnames(dfNA),
+  #dist_var = c("CowWar"),
+  weights = NULL,
+  numFun = median,
+  catFun = maxCat,
+  makeNA = NULL,
+  NAcond = NULL,
+  impNA = TRUE,
+  donorcond = NULL,
+  mixed = vector(),
+  mixed.constant = NULL,
+  trace = FALSE,
+#  imp_var = TRUE,
+#  imp_suffix = "Imputada",
+  addRandom = FALSE,
+  useImputedDist = TRUE,
+  weightDist = FALSE
+)
+
+#head(dfNA)
+#head(dfNA[which(dfNA$CowWar_imp  == TRUE),])
+#tabla_vpCosto <-dfNA[index_perdidos_Costo,]
+#tabla_vpCosto <-dfNA[index_perdidos_Costo,]
+#dfNA<- dfNA[,1:9]
+#tabla_vpCosto <- tabla_vpCosto[,1:9]
+#kable(tabla_vpCosto, caption = "REGISTROS IMPUTADOS POR MEDIDA GOWER PARA COWWAR") %>%
+#  kable_styling(latex_options=c("striped", "hold_position"), position = "left") %>%
+#  column_spec(1, bold = T, color = "gray", background = "#EAF5F9") %>%
+#  column_spec(2, bold = T, color = "gray", background = "#DAF5FD") %>%
+ # column_spec(3, bold = T, color = "gray", background = "#CAF2FF") %>%
+#  column_spec(4, bold = T, color = "gray", background = "#A1E9FF") %>%
+#   column_spec(5, bold = T, color = "white", background = "#BA2246") %>%
+#   column_spec(6, bold = T, color = "gray", background = "#18D6F3") %>%
+#     column_spec(7, bold = T, color = "gray", background = "#18D6F3") %>%
+#   column_spec(8, bold = T, color = "gray", background = "#A1E9FF") %>%
+#   column_spec(9, bold = T, color = "gray", background = "#A1E9FF") %>%
+#     column_spec(10, bold = T, color = "gray", background = "#A1E9FF") %>%
+#     add_footnote(c("Se observa la variable imputada en color rojo"), notation = "symbol")
+
+
+```
+
+
+```{r, echo=FALSE}
+#library('caret')
+
+#df2 <- c()
+
+#df2 <- data.frame(dfNA)
+#df2 <- df2[, names(df2) %in% VC, drop = F]
+#df2 = cor(df2)
+
+
+#hc = findCorrelation(df2, cutoff=0.3) # putt any value as a "cutoff" 
+#hc = sort(hc)
+#reduced_Data = df1[,-c(hc)]
+
+```
+<p>Se realiza matriz de correlación para eliminar variables altamente correlacionadas</p>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(corrplot)
+df2 <- c()
+
+df2 <- data.frame(dfNA)
+df2 <-df2[,which(names(df2) %in% VC)]
+
+M<-cor(df2)
+#p.mat <- cor.mtest(variables_continuas)
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+
+
+cor.mtest <- function(mat) {
+    mat <- as.matrix(mat)
+    n <- ncol(mat)
+    p.mat<- matrix(NA, n, n)
+    diag(p.mat) <- 0
+    for (i in 1:(n - 1)) {
+        for (j in (i + 1):n) {
+            tmp <- cor.test(mat[, i], mat[, j], ...)
+            p.mat[i, j] <- p.mat[j, i] <- tmp$p.value
+        }
+    }
+  colnames(p.mat) <- rownames(p.mat) <- colnames(mat) 
+  p.mat
+}
+
+
+title <- "Matriz de Correlación"
+corrplot(M, type="upper", order="hclust", title=title,
+#corrplot(M, method="color", col=col(200),  
+#          diag=FALSE,
+#          type="upper", order="hclust", 
+#         title=title, 
+#          addCoef.col = "black", # Add coefficient of correlation
+         # Combine with significance
+#         p.mat = p.mat, sig.level = 0.05, insig = "blank", 
+         # hide correlation coefficient on the principal diagonal
+#     mar=c(0,0,1,0) # http://stackoverflow.com/a/14754408/54964
+    #     tl.col="black", tl.srt=0,
+         mar=c(0,0,1,0)
+         )
+
+```
+<p>Se elimina la variable "Lgt" (tamaño del texto en páginas) por alta correlación con "N_Characteres"(tamaño del texto en caracteres), LaRefRef y con "TjPower" (Incluye anmistía)</p>
+
+
+```{r, echo=FALSE}
+#names(df2)
+#names(df)
+
+#DatosNumero = rbind(df, df3)
+#View (DatosNumero)
+
+#Datos a dejar para cualitativas:
+#cols.SQLCualit <- c("PP","Con","Contp","Reg")
+
+#df4 <- c()
+#df4 <- data.frame(df)
+
+#df4 <- df[,names(df) %in% cols.SQLCualit, drop = F]
+
+#Datos a quitar para cuantitativas según correlación
+#cols.SQLCuanti_Quit <- c("Lgt")
+#df3 <- df3[,!names(df3) %in% cols.SQLCuanti_Quit, drop = F]
+
+#names(df3)
+#names(df4)
+
+tabla_datos<- c()
+#tabla_datos <- rbind(df3,df4)
+#str(df3)
+#str(df4)
+#tabla_datos <- bind_cols(df3,df4)
+df$AgtId <- as.numeric(df1$AgtId)
+df2$AgtId <- as.numeric(df2$AgtId)
+#tabla_datos <-merge(df2, df, by  = "AgtId")
+
+
+
+df3 <- c()
+df3 <-inner_join(df, df2,by = "AgtId")
+col.dejar2<- c("Con","Contp","PP","Reg","AgtId","Ver.x","Lgt.x","N_characters.x","CowWar.x","BanPers.x","LaRefRet.x","TjPower.x","TjVic.x")
+df3 <- df3[,names(df3) %in% col.dejar2, drop = F]
+#head(df3)
+summary(df3)
+#names(df3)
+```
+#### 2.1. Outliers
+
+```{r plot_ve, echo=FALSE}
+plot_ve <- boxplot(df3$CowWar.x,main="Box plot de Correlates War",
+                   names = "Correlación de Guerra",
+                   xlab = "Correlaciones de Guerra",
+                   ylab = "# de registros",
+                   col="coral2",
+                   border = "blue",
+                   horizontal = TRUE,
+                   notch = TRUE)
+```
+<p>Se gestionan outliers con eliminación:</p>
+```{r, echo=TRUE}
+values <- df3$CowWar.x
+values <-boxplot.stats(values)$out
+idx <- which(df3$CowWar.x %in% values) 
+#idx 
+C_outliers <- df3[idx,]
+#head(C_outliers)
+
+df4 <- c()
+
+df4 <- data.frame(df3)
+
+```
+
+### 3. Crear el archivo limpio
+Se anexa archivo limpio eliminando outliers y variable muy correlacionada (Lgt), Este archivo se usará para la visualización en Power BI o Tableau:
+
+```{r, echo=TRUE}
+
+#variable correlacionada a eliminar:
+cols.SQLCuanti_Quit <- c("Lgt.x")
+df4 <- df4[,!names(df4) %in% cols.SQLCuanti_Quit, drop = F]
+
+
+archivo_clean <- df4[ which(df4$CowWar.x > 240),]
+summary(archivo_clean)
+write.csv(archivo_clean,"pinzon_fichero_Visualizacion.csv",row.names=FALSE)
+```
+
+### 4. CONCLUSIONES DEL ANÁLISIS
+<p>
+Colombia es el país con más procesos de paz (casi 150), para las américas.</p>
+
+<p>En cuando a regiones, África ha sido el país con más acuerdos de paz.</p> 
+
+<p>Es interesante que la concesión de amnistías haga que el texto sea mucho más largo (muchas páginas). Correlación superior al 60%.</p>
+
+<p>Igualmente, el tema de restitución de tierras alarga mucho el texto del acuerdo de paz.</p>
+
+<p>Los conflictos por territorio abarcan más del 45%, seguidos de conflictos por temas gubernamentales.</p>
+
+<p> Ruta con todos los archivos:</p>
+https://github.com/adrife20/PEC2_Visualizacion_Datos
+
+ 
+
+```{r, echo=FALSE}
+
+```
+
